@@ -93,6 +93,18 @@ public class MojangApi {
 		return new VersionDirectory(dotMinecraftDirectory, versionId, jar, json);
 	}
 
+	public MojangApi createSilentPlayerlessCopy() {
+		MojangApi result = new MojangApi(WorldBuilder.createSilentPlayerless(), dotMinecraftDirectory);
+		try {
+			result.set(profileName, profileDirectory, versionDirectory);
+		} catch (LocalMinecraftInterfaceCreationException e) {
+			// This will not happen normally, because we already successfully
+			// created the same LocalMinecraftInterface once before.
+			throw new RuntimeException("exception while duplicating the MojangApi", e);
+		}
+		return result;
+	}
+
 	public File getSaves() {
 		ProfileDirectory profileDirectory = this.profileDirectory;
 		if (profileDirectory != null) {
@@ -111,7 +123,8 @@ public class MojangApi {
 	 * one world at a time. Creating a new world will break all previously
 	 * created world objects.
 	 */
-	public World createWorldFromSeed(WorldSeed worldSeed, WorldType worldType) throws IllegalStateException,
+	public World createWorldFromSeed(WorldSeed worldSeed, WorldType worldType)
+			throws IllegalStateException,
 			MinecraftInterfaceException {
 		MinecraftInterface minecraftInterface = this.minecraftInterface;
 		if (minecraftInterface != null) {
@@ -126,8 +139,12 @@ public class MojangApi {
 	 * one world at a time. Creating a new world will break all previously
 	 * created world objects.
 	 */
-	public World createWorldFromSaveGame(File file) throws FileNotFoundException, IOException, IllegalStateException,
-			MinecraftInterfaceException, MojangApiParsingException {
+	public World createWorldFromSaveGame(File file)
+			throws FileNotFoundException,
+			IOException,
+			IllegalStateException,
+			MinecraftInterfaceException,
+			MojangApiParsingException {
 		MinecraftInterface minecraftInterface = this.minecraftInterface;
 		if (minecraftInterface != null) {
 			return worldBuilder.fromSaveGame(minecraftInterface, SaveDirectory.from(file));
@@ -160,14 +177,5 @@ public class MojangApi {
 		} else {
 			return UNKNOWN_PROFILE_NAME;
 		}
-	}
-
-	public MojangApi duplicateApiInterface(WorldBuilder worldBuilder)
-			throws LocalMinecraftInterfaceCreationException {
-		MojangApi duplicate = new MojangApi(worldBuilder, 
-			getDotMinecraftDirectory());
-		duplicate.set(this.profileName, this.profileDirectory,
-			this.versionDirectory);
-		return duplicate;
 	}
 }

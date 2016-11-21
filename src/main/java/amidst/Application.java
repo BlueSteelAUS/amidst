@@ -26,30 +26,32 @@ public class Application {
 	private final AmidstSettings settings;
 	private final MojangApi mojangApi;
 	private final BiomeProfileDirectory biomeProfileDirectory;
-	private final ViewerFacadeBuilder viewerFacadeBuilder;
 	private final ThreadMaster threadMaster;
+	private final ViewerFacadeBuilder viewerFacadeBuilder;
 
 	private volatile ProfileSelectWindow profileSelectWindow;
 	private volatile MainWindow mainWindow;
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public Application(CommandLineParameters parameters, AmidstMetaData metadata, AmidstSettings settings)
-			throws DotMinecraftDirectoryNotFoundException, LocalMinecraftInterfaceCreationException {
+			throws DotMinecraftDirectoryNotFoundException,
+			LocalMinecraftInterfaceCreationException {
 		this.parameters = parameters;
 		this.metadata = metadata;
 		this.settings = settings;
 		this.mojangApi = createMojangApi();
 		this.biomeProfileDirectory = createBiomeProfileDirectory();
-		this.viewerFacadeBuilder = createViewerFacadeBuilder();
 		this.threadMaster = createThreadMaster();
+		this.viewerFacadeBuilder = createViewerFacadeBuilder();
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	private MojangApi createMojangApi() throws DotMinecraftDirectoryNotFoundException,
+	private MojangApi createMojangApi()
+			throws DotMinecraftDirectoryNotFoundException,
 			LocalMinecraftInterfaceCreationException {
-		return new MojangApiBuilder(new WorldBuilder(
-				new PlayerInformationCacheImpl(),
-				SeedHistoryLogger.from(parameters.seedHistoryFile)), parameters).construct();
+		return new MojangApiBuilder(
+				new WorldBuilder(new PlayerInformationCacheImpl(), SeedHistoryLogger.from(parameters.seedHistoryFile)),
+				parameters).construct();
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
@@ -58,13 +60,13 @@ public class Application {
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	private ViewerFacadeBuilder createViewerFacadeBuilder() {
-		return new ViewerFacadeBuilder(settings, new LayerBuilder());
+	private ThreadMaster createThreadMaster() {
+		return new ThreadMaster();
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	private ThreadMaster createThreadMaster() {
-		return new ThreadMaster();
+	private ViewerFacadeBuilder createViewerFacadeBuilder() {
+		return new ViewerFacadeBuilder(settings, threadMaster.getWorkerExecutor(), new LayerBuilder());
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
@@ -89,25 +91,22 @@ public class Application {
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public void displayMainWindow() {
-		setMainWindow(new MainWindow(
-				this,
-				metadata,
-				settings,
-				mojangApi,
-				biomeProfileDirectory,
-				viewerFacadeBuilder,
-				threadMaster));
+		setMainWindow(
+				new MainWindow(
+						this,
+						metadata,
+						settings,
+						mojangApi,
+						biomeProfileDirectory,
+						viewerFacadeBuilder,
+						threadMaster));
 		setProfileSelectWindow(null);
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public void displayProfileSelectWindow() {
-		setProfileSelectWindow(new ProfileSelectWindow(
-				this,
-				metadata,
-				threadMaster.getWorkerExecutor(),
-				mojangApi,
-				settings));
+		setProfileSelectWindow(
+				new ProfileSelectWindow(this, metadata, threadMaster.getWorkerExecutor(), mojangApi, settings));
 		setMainWindow(null);
 	}
 

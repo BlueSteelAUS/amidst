@@ -16,49 +16,37 @@ import amidst.Application;
 import amidst.documentation.AmidstThread;
 import amidst.documentation.CalledOnlyBy;
 import amidst.documentation.NotThreadSafe;
+import amidst.gui.crash.CrashWindow;
 import amidst.gui.main.menu.MovePlayerPopupMenu;
 import amidst.gui.main.viewer.ViewerFacade;
-import amidst.logging.Log;
-import amidst.mojangapi.MojangApi;
-import amidst.mojangapi.file.MojangApiParsingException;
-import amidst.mojangapi.minecraftinterface.local.LocalMinecraftInterfaceCreationException;
-import amidst.mojangapi.minecraftinterface.MinecraftInterfaceException;
+import amidst.logging.AmidstLogger;
 import amidst.mojangapi.world.WorldSeed;
 import amidst.mojangapi.world.WorldType;
 import amidst.mojangapi.world.coordinates.CoordinatesInWorld;
-import amidst.mojangapi.world.filter.WorldFinder;
 import amidst.mojangapi.world.icon.WorldIcon;
 import amidst.mojangapi.world.player.Player;
 import amidst.mojangapi.world.player.PlayerCoordinates;
 import amidst.settings.biomeprofile.BiomeProfile;
 import amidst.settings.biomeprofile.BiomeProfileSelection;
-import amidst.threading.WorkerExecutor;
 import amidst.util.FileExtensionChecker;
 
 @NotThreadSafe
 public class Actions {
 	private final Application application;
-	private final MojangApi mojangApi;
 	private final MainWindow mainWindow;
 	private final AtomicReference<ViewerFacade> viewerFacade;
 	private final BiomeProfileSelection biomeProfileSelection;
-	private final WorkerExecutor workerExecutor;
-	private WorldFinder worldFinder = null;
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public Actions(
 			Application application,
-			MojangApi mojangApi,
 			MainWindow mainWindow,
 			AtomicReference<ViewerFacade> viewerFacade,
-			BiomeProfileSelection biomeProfileSelection,
-			WorkerExecutor workerExecutor) {
+			BiomeProfileSelection biomeProfileSelection) {
 		this.application = application;
-		this.mojangApi = mojangApi;
 		this.mainWindow = mainWindow;
 		this.viewerFacade = viewerFacade;
 		this.biomeProfileSelection = biomeProfileSelection;
-		this.workerExecutor = workerExecutor;
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
@@ -78,55 +66,28 @@ public class Actions {
 	private void newFromSeed(WorldSeed worldSeed) {
 		WorldType worldType = mainWindow.askForWorldType();
 		if (worldType != null) {
-			try {
-				mainWindow.setWorld(mojangApi.createWorldFromSeed(worldSeed,
-						worldType));
-			} catch (IllegalStateException | MinecraftInterfaceException e) {
-				e.printStackTrace();
-				mainWindow.displayException(e);
-			}
+			mainWindow.displayWorld(worldSeed, worldType);
 		}
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public void searchForRandom() {
-		try {
-			if (worldFinder == null) {
-				this.worldFinder = new WorldFinder(mojangApi);
-				worldFinder.configureFromFile(new File("search.json"));
-			}
-			
-			if (worldFinder.canFindWorlds()) {
-				if (worldFinder.isSearching()) {
-					mainWindow.displayMessage("", "Search in progress");
-				} else {
-					final WorldType worldType = mainWindow.askForWorldType();
-					if (worldType != null) {
-						worldFinder.findRandomWorld(worldType, workerExecutor, mainWindow);
-					}
-				}
-			} else {
-				mainWindow.displayMessage("Search not configured", 
-						"Please see [url] for details on setting up search");
-			}
-
-		} catch (LocalMinecraftInterfaceCreationException | IllegalStateException |
-				MojangApiParsingException | IOException e) {
-			e.printStackTrace();
-			mainWindow.displayException(e);
-		}
+		mainWindow.displaySeedSearcherWindow();
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public void openSaveGame() {
 		File file = mainWindow.askForSaveGame();
 		if (file != null) {
-			try {
-				mainWindow.setWorld(mojangApi.createWorldFromSaveGame(file));
-			} catch (IllegalStateException | MinecraftInterfaceException | IOException | MojangApiParsingException e) {
-				e.printStackTrace();
-				mainWindow.displayException(e);
-			}
+			mainWindow.displayWorld(file);
+		}
+	}
+
+	@CalledOnlyBy(AmidstThread.EDT)
+	public void export() {
+		ViewerFacade viewerFacade = this.viewerFacade.get();
+		if (viewerFacade != null) {
+			viewerFacade.export(mainWindow.askForExportConfiguration());
 		}
 	}
 
@@ -150,7 +111,7 @@ public class Actions {
 				if (coordinates != null) {
 					viewerFacade.centerOn(coordinates);
 				} else {
-					Log.w("Invalid location entered, ignoring.");
+					AmidstLogger.warn("Invalid location entered, ignoring.");
 					mainWindow.displayError("You entered an invalid location.");
 				}
 			}
@@ -169,10 +130,8 @@ public class Actions {
 	public void goToStronghold() {
 		ViewerFacade viewerFacade = this.viewerFacade.get();
 		if (viewerFacade != null) {
-			WorldIcon stronghold = mainWindow.askForOptions(
-					"Go to",
-					"Select Stronghold:",
-					viewerFacade.getStrongholdWorldIcons());
+			WorldIcon stronghold = mainWindow
+					.askForOptions("Go to", "Select Stronghold:", viewerFacade.getStrongholdWorldIcons());
 			if (stronghold != null) {
 				viewerFacade.centerOn(stronghold);
 			}
@@ -190,9 +149,20 @@ public class Actions {
 					viewerFacade.centerOn(player);
 				}
 			} else {
+				AmidstLogger.warn("There are no players in this world.");
 				mainWindow.displayError("There are no players in this world.");
 			}
 		}
+	}
+
+	@CalledOnlyBy(AmidstThread.EDT)
+	public void zoomIn() {
+		adjustZoom(-1);
+	}
+
+	@CalledOnlyBy(AmidstThread.EDT)
+	public void zoomOut() {
+		adjustZoom(1);
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
@@ -209,13 +179,13 @@ public class Actions {
 	public void reloadPlayerLocations() {
 		ViewerFacade viewerFacade = this.viewerFacade.get();
 		if (viewerFacade != null) {
-			viewerFacade.loadPlayers(workerExecutor);
+			viewerFacade.loadPlayers();
 		}
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public void howCanIMoveAPlayer() {
-		mainWindow.displayMessage(
+		mainWindow.displayInfo(
 				"How can I move a player?",
 				"If you load the world from a save game, you can change the player locations.\n"
 						+ "1. Scroll the map to and right-click on the new player location, this opens a popup menu.\n"
@@ -244,15 +214,18 @@ public class Actions {
 			if (file != null) {
 				file = appendPNGFileExtensionIfNecessary(file);
 				if (file.exists() && !file.isFile()) {
-					mainWindow
-							.displayError("Unable to write capture image, because the target exists but is not a file: "
-									+ file.getAbsolutePath());
+					String message = "Unable to write capture image, because the target exists but is not a file: "
+							+ file.getAbsolutePath();
+					AmidstLogger.warn(message);
+					mainWindow.displayError(message);
 				} else if (!canWriteToFile(file)) {
-					mainWindow.displayError("Unable to write capture image, because you have no writing permissions: "
-							+ file.getAbsolutePath());
-				} else if (!file.exists()
-						|| mainWindow.askToConfirm("Replace file?", "File already exists. Do you want to replace it?\n"
-								+ file.getAbsolutePath() + "")) {
+					String message = "Unable to write capture image, because you have no writing permissions: "
+							+ file.getAbsolutePath();
+					AmidstLogger.warn(message);
+					mainWindow.displayError(message);
+				} else if (!file.exists() || mainWindow.askToConfirmYesNo(
+						"Replace file?",
+						"File already exists. Do you want to replace it?\n" + file.getAbsolutePath() + "")) {
 					saveImageToFile(image, file);
 				}
 			}
@@ -270,6 +243,11 @@ public class Actions {
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
+	public void displayLogMessages() {
+		CrashWindow.showForInterest();
+	}
+
+	@CalledOnlyBy(AmidstThread.EDT)
 	public void checkForUpdates() {
 		application.checkForUpdates(mainWindow);
 	}
@@ -281,13 +259,15 @@ public class Actions {
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public void about() {
-		mainWindow.displayMessage("About", "Amidst - Advanced Minecraft Interfacing and Data/Structure Tracking\n\n"
-				+ "Author: Skidoodle aka skiphs\n" + "Mail: toolbox4minecraft+amidst@gmail.com\n"
-				+ "Project Page: https://github.com/toolbox4minecraft/amidst");
+		mainWindow.displayInfo(
+				"About",
+				"Amidst - Advanced Minecraft Interfacing and Data/Structure Tracking\n\n"
+						+ "Author: Skidoodle aka skiphs\n" + "Mail: toolbox4minecraft+amidst@gmail.com\n"
+						+ "Project Page: https://github.com/toolbox4minecraft/amidst");
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	public void adjustZoom(int notches) {
+	private void adjustZoom(int notches) {
 		ViewerFacade viewerFacade = this.viewerFacade.get();
 		if (viewerFacade != null) {
 			viewerFacade.adjustZoom(notches);
@@ -315,10 +295,8 @@ public class Actions {
 		ViewerFacade viewerFacade = this.viewerFacade.get();
 		if (viewerFacade != null) {
 			if (viewerFacade.canSavePlayerLocations()) {
-				new MovePlayerPopupMenu(this, viewerFacade.getMovablePlayerList(), targetCoordinates).show(
-						component,
-						x,
-						y);
+				new MovePlayerPopupMenu(this, viewerFacade.getMovablePlayerList(), targetCoordinates)
+						.show(component, x, y);
 			}
 		}
 	}
@@ -333,7 +311,8 @@ public class Actions {
 			if (input != null) {
 				player.moveTo(targetCoordinates, tryParseLong(input, currentHeight), currentCoordinates.getDimension());
 				viewerFacade.reloadPlayerLayer();
-				if (mainWindow.askToConfirm("Save Player Locations", "Do you want to save the player locations?")) {
+				if (mainWindow
+						.askToConfirmYesNo("Save Player Locations", "Do you want to save the player locations?")) {
 					if (mainWindow.askToConfirmSaveGameManipulation()) {
 						viewerFacade.savePlayerLocations();
 					}
@@ -362,8 +341,8 @@ public class Actions {
 		try {
 			ImageIO.write(image, "png", file);
 		} catch (IOException e) {
-			e.printStackTrace();
-			mainWindow.displayException(e);
+			AmidstLogger.warn(e);
+			mainWindow.displayError(e);
 		}
 	}
 
