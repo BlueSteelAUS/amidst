@@ -2,8 +2,6 @@ package amidst.gui.main;
 
 import java.awt.BorderLayout;
 import java.awt.Container;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
@@ -57,7 +55,7 @@ public class MainWindow {
 	private final AmidstMenu menuBar;
 	private final SeedSearcherWindow seedSearcherWindow;
 
-	private final AtomicReference<ViewerFacade> viewerFacade = new AtomicReference<ViewerFacade>();
+	private final AtomicReference<ViewerFacade> viewerFacade = new AtomicReference<>();
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public MainWindow(
@@ -80,7 +78,6 @@ public class MainWindow {
 		this.actions = createActions();
 		this.menuBar = createMenuBar();
 		this.seedSearcherWindow = createSeedSearcherWindow();
-		initKeyListener();
 		initCloseListener();
 		showFrame();
 		clearViewerFacade();
@@ -89,10 +86,11 @@ public class MainWindow {
 	@CalledOnlyBy(AmidstThread.EDT)
 	private JFrame createFrame() {
 		JFrame frame = new JFrame();
-		frame.setTitle(createVersionString(
-				mojangApi.getVersionId(),
-				mojangApi.getRecognisedVersionName(),
-				mojangApi.getProfileName()));
+		frame.setTitle(
+				createVersionString(
+						mojangApi.getVersionId(),
+						mojangApi.getRecognisedVersionName(),
+						mojangApi.getProfileName()));
 		frame.setSize(1000, 800);
 		frame.setIconImages(metadata.getIcons());
 		return frame;
@@ -125,24 +123,10 @@ public class MainWindow {
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	private SeedSearcherWindow createSeedSearcherWindow() {
-		return new SeedSearcherWindow(metadata, this, new SeedSearcher(
+		return new SeedSearcherWindow(
+				metadata,
 				this,
-				mojangApi,
-				threadMaster.getWorkerExecutor()));
-	}
-
-	@CalledOnlyBy(AmidstThread.EDT)
-	private void initKeyListener() {
-		frame.addKeyListener(new KeyAdapter() {
-			@Override
-			public void keyTyped(KeyEvent e) {
-				if (e.getKeyChar() == '+') {
-					actions.adjustZoom(-1);
-				} else if (e.getKeyChar() == '-') {
-					actions.adjustZoom(1);
-				}
-			}
-		});
+				new SeedSearcher(this, mojangApi, threadMaster.getWorkerExecutor()));
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
@@ -333,7 +317,8 @@ public class MainWindow {
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public boolean askToConfirm(String title, String message) {
-		return JOptionPane.showConfirmDialog(frame, message, title, JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION;
+		return JOptionPane
+				.showConfirmDialog(frame, message, title, JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION;
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
@@ -350,14 +335,8 @@ public class MainWindow {
 	@SuppressWarnings("unchecked")
 	public <T> T askForOptions(String title, String message, List<T> choices) {
 		Object[] choicesArray = choices.toArray();
-		return (T) JOptionPane.showInputDialog(
-				frame,
-				message,
-				title,
-				JOptionPane.PLAIN_MESSAGE,
-				null,
-				choicesArray,
-				choicesArray[0]);
+		return (T) JOptionPane
+				.showInputDialog(frame, message, title, JOptionPane.PLAIN_MESSAGE, null, choicesArray, choicesArray[0]);
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
