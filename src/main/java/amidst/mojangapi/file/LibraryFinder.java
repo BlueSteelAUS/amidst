@@ -18,7 +18,7 @@ public enum LibraryFinder {
 
 	@NotNull
 	public static List<URL> getLibraryUrls(File librariesDirectory, List<LibraryJson> libraries) {
-		List<URL> result = new ArrayList<URL>();
+		List<URL> result = new ArrayList<>();
 		for (LibraryJson library : libraries) {
 			File libraryFile = getLibraryFile(librariesDirectory, library);
 			if (libraryFile != null) {
@@ -38,7 +38,7 @@ public enum LibraryFinder {
 
 	private static File getLibraryFile(File librariesDirectory, LibraryJson library) {
 		try {
-			if (library.isActive(getOs())) {
+			if (library.isActive(getOs(), OperatingSystemDetector.getVersion())) {
 				return getLibraryFile(getLibrarySearchPath(librariesDirectory, library.getName()));
 			} else {
 				return null;
