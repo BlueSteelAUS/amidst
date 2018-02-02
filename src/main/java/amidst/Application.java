@@ -1,112 +1,82 @@
 package amidst;
 
+import java.util.Optional;
+
+import amidst.dependency.injection.Factory0;
+import amidst.dependency.injection.Factory1;
 import amidst.documentation.AmidstThread;
 import amidst.documentation.CalledOnlyBy;
 import amidst.documentation.NotThreadSafe;
-import amidst.fragment.layer.LayerBuilder;
 import amidst.gui.license.LicenseWindow;
 import amidst.gui.main.MainWindow;
+import amidst.gui.main.MainWindowDialogs;
 import amidst.gui.main.UpdatePrompt;
-import amidst.gui.main.viewer.ViewerFacadeBuilder;
 import amidst.gui.profileselect.ProfileSelectWindow;
-import amidst.mojangapi.MojangApi;
-import amidst.mojangapi.MojangApiBuilder;
-import amidst.mojangapi.file.DotMinecraftDirectoryNotFoundException;
+import amidst.mojangapi.LauncherProfileRunner;
+import amidst.mojangapi.RunningLauncherProfile;
+import amidst.mojangapi.file.LauncherProfile;
 import amidst.mojangapi.minecraftinterface.local.LocalMinecraftInterfaceCreationException;
-import amidst.mojangapi.world.SeedHistoryLogger;
-import amidst.mojangapi.world.WorldBuilder;
-import amidst.mojangapi.world.player.PlayerInformationCacheImpl;
-import amidst.settings.biomeprofile.BiomeProfileDirectory;
-import amidst.threading.ThreadMaster;
 
 @NotThreadSafe
 public class Application {
-	private final CommandLineParameters parameters;
-	private final AmidstMetaData metadata;
-	private final AmidstSettings settings;
-	private final MojangApi mojangApi;
-	private final BiomeProfileDirectory biomeProfileDirectory;
-	private final ThreadMaster threadMaster;
-	private final ViewerFacadeBuilder viewerFacadeBuilder;
+	private final Optional<LauncherProfile> preferredLauncherProfile;
+	private final LauncherProfileRunner launcherProfileRunner;
+	private final Factory1<MainWindowDialogs, UpdatePrompt> noisyUpdatePromptFactory;
+	private final Factory0<UpdatePrompt> silentUpdatePromptFactory;
+	private final Factory1<RunningLauncherProfile, MainWindow> mainWindowFactory;
+	private final Factory0<ProfileSelectWindow> profileSelectWindowFactory;
+	private final Factory0<LicenseWindow> licenseWindowFactory;
 
 	private volatile ProfileSelectWindow profileSelectWindow;
 	private volatile MainWindow mainWindow;
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	public Application(CommandLineParameters parameters, AmidstMetaData metadata, AmidstSettings settings)
-			throws DotMinecraftDirectoryNotFoundException,
-			LocalMinecraftInterfaceCreationException {
-		this.parameters = parameters;
-		this.metadata = metadata;
-		this.settings = settings;
-		this.mojangApi = createMojangApi();
-		this.biomeProfileDirectory = createBiomeProfileDirectory();
-		this.threadMaster = createThreadMaster();
-		this.viewerFacadeBuilder = createViewerFacadeBuilder();
+	public Application(
+			Optional<LauncherProfile> preferredLauncherProfile,
+			LauncherProfileRunner launcherProfileRunner,
+			Factory1<MainWindowDialogs, UpdatePrompt> noisyUpdatePromptFactory,
+			Factory0<UpdatePrompt> silentUpdatePromptFactory,
+			Factory1<RunningLauncherProfile, MainWindow> mainWindowFactory,
+			Factory0<ProfileSelectWindow> profileSelectWindowFactory,
+			Factory0<LicenseWindow> licenseWindowFactory) {
+		this.preferredLauncherProfile = preferredLauncherProfile;
+		this.launcherProfileRunner = launcherProfileRunner;
+		this.noisyUpdatePromptFactory = noisyUpdatePromptFactory;
+		this.silentUpdatePromptFactory = silentUpdatePromptFactory;
+		this.mainWindowFactory = mainWindowFactory;
+		this.profileSelectWindowFactory = profileSelectWindowFactory;
+		this.licenseWindowFactory = licenseWindowFactory;
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	private MojangApi createMojangApi()
-			throws DotMinecraftDirectoryNotFoundException,
-			LocalMinecraftInterfaceCreationException {
-		return new MojangApiBuilder(
-				new WorldBuilder(new PlayerInformationCacheImpl(), SeedHistoryLogger.from(parameters.seedHistoryFile)),
-				parameters).construct();
-	}
-
-	@CalledOnlyBy(AmidstThread.EDT)
-	private BiomeProfileDirectory createBiomeProfileDirectory() {
-		return BiomeProfileDirectory.create(parameters.biomeProfilesDirectory);
-	}
-
-	@CalledOnlyBy(AmidstThread.EDT)
-	private ThreadMaster createThreadMaster() {
-		return new ThreadMaster();
-	}
-
-	@CalledOnlyBy(AmidstThread.EDT)
-	private ViewerFacadeBuilder createViewerFacadeBuilder() {
-		return new ViewerFacadeBuilder(settings, threadMaster.getWorkerExecutor(), new LayerBuilder());
-	}
-
-	@CalledOnlyBy(AmidstThread.EDT)
-	public void run() {
+	public void run() throws LocalMinecraftInterfaceCreationException {
 		checkForUpdatesSilently();
-		if (mojangApi.canCreateWorld()) {
-			displayMainWindow();
+		if (preferredLauncherProfile.isPresent()) {
+			displayMainWindow(launcherProfileRunner.run(preferredLauncherProfile.get()));
 		} else {
 			displayProfileSelectWindow();
 		}
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	public void checkForUpdates(MainWindow mainWindow) {
-		UpdatePrompt.from(metadata.getVersion(), threadMaster.getWorkerExecutor(), mainWindow, false).check();
+	public void checkForUpdates(MainWindowDialogs dialogs) {
+		noisyUpdatePromptFactory.create(dialogs).check();
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public void checkForUpdatesSilently() {
-		UpdatePrompt.from(metadata.getVersion(), threadMaster.getWorkerExecutor(), null, true).check();
+		silentUpdatePromptFactory.create().check();
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	public void displayMainWindow() {
-		setMainWindow(
-				new MainWindow(
-						this,
-						metadata,
-						settings,
-						mojangApi,
-						biomeProfileDirectory,
-						viewerFacadeBuilder,
-						threadMaster));
+	public void displayMainWindow(RunningLauncherProfile runningLauncherProfile) {
+		setMainWindow(mainWindowFactory.create(runningLauncherProfile));
 		setProfileSelectWindow(null);
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public void displayProfileSelectWindow() {
-		setProfileSelectWindow(
-				new ProfileSelectWindow(this, metadata, threadMaster.getWorkerExecutor(), mojangApi, settings));
+		setProfileSelectWindow(profileSelectWindowFactory.create());
 		setMainWindow(null);
 	}
 
@@ -140,7 +110,7 @@ public class Application {
 
 	@CalledOnlyBy(AmidstThread.EDT)
 	public void displayLicenseWindow() {
-		new LicenseWindow(metadata);
+		licenseWindowFactory.create();
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)

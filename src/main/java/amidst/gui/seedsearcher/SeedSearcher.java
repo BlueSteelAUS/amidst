@@ -5,9 +5,9 @@ import java.util.function.Consumer;
 import amidst.documentation.AmidstThread;
 import amidst.documentation.CalledOnlyBy;
 import amidst.documentation.NotThreadSafe;
-import amidst.gui.main.MainWindow;
+import amidst.gui.main.MainWindowDialogs;
 import amidst.logging.AmidstLogger;
-import amidst.mojangapi.MojangApi;
+import amidst.mojangapi.RunningLauncherProfile;
 import amidst.mojangapi.minecraftinterface.MinecraftInterfaceException;
 import amidst.mojangapi.world.World;
 import amidst.mojangapi.world.WorldSeed;
@@ -17,17 +17,20 @@ import amidst.threading.worker.ProgressReportingWorker;
 
 @NotThreadSafe
 public class SeedSearcher {
-	private final MainWindow mainWindow;
-	private final MojangApi mojangApi;
+	private final MainWindowDialogs dialogs;
+	private final RunningLauncherProfile runningLauncherProfile;
 	private final WorkerExecutor workerExecutor;
 
 	private volatile boolean isSearching = false;
 	private volatile boolean isStopRequested = false;
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	public SeedSearcher(MainWindow mainWindow, MojangApi mojangApi, WorkerExecutor workerExecutor) {
-		this.mainWindow = mainWindow;
-		this.mojangApi = mojangApi.createSilentPlayerlessCopy();
+	public SeedSearcher(
+			MainWindowDialogs dialogs,
+			RunningLauncherProfile runningLauncherProfile,
+			WorkerExecutor workerExecutor) {
+		this.dialogs = dialogs;
+		this.runningLauncherProfile = runningLauncherProfile;
 		this.workerExecutor = workerExecutor;
 	}
 
@@ -69,7 +72,7 @@ public class SeedSearcher {
 			doSearch(reporter, configuration);
 		} catch (IllegalStateException | MinecraftInterfaceException e) {
 			AmidstLogger.warn(e);
-			mainWindow.displayError(e);
+			dialogs.displayError(e);
 		} finally {
 			this.isSearching = false;
 			this.isStopRequested = false;
@@ -87,13 +90,16 @@ public class SeedSearcher {
 
 	@CalledOnlyBy(AmidstThread.WORKER)
 	private void doSearchOne(ProgressReporter<WorldSeed> reporter, SeedSearcherConfiguration configuration)
-			throws MinecraftInterfaceException {
+			throws IllegalStateException,
+			MinecraftInterfaceException {
 		while (!isStopRequested) {
-			World world = mojangApi.createWorldFromSeed(WorldSeed.random(), configuration.getWorldType());
+			World world = runningLauncherProfile.createWorldFromSeed(WorldSeed.random(), configuration.getWorldType());
 			if (configuration.getWorldFilter().isValid(world)) {
 				reporter.report(world.getWorldSeed());
+				world.dispose();
 				break;
 			}
+			world.dispose();
 		}
 	}
 }
