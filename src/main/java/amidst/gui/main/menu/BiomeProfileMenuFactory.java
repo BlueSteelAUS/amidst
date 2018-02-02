@@ -22,7 +22,7 @@ public class BiomeProfileMenuFactory {
 	private static class BiomeProfileVisitorImpl implements BiomeProfileVisitor {
 		private final List<JCheckBoxMenuItem> allCheckBoxes = new ArrayList<>();
 		private final List<JMenu> menuStack = new ArrayList<>();
-		private ActionListener firstListener;
+		private Runnable defaultBiomeProfileSelector;
 		private boolean isFirstContainer = true;
 
 		private final Actions actions;
@@ -92,15 +92,15 @@ public class BiomeProfileMenuFactory {
 					actions.selectBiomeProfile(profile);
 				}
 			};
-			if (firstListener == null) {
-				firstListener = result;
+			if (defaultBiomeProfileSelector == null && profile.getName().equals("default")) {
+				defaultBiomeProfileSelector = () -> result.actionPerformed(null);
 			}
 			return result;
 		}
 
-		public void selectFirstProfile() {
-			if (firstListener != null) {
-				firstListener.actionPerformed(null);
+		public void selectDefaultBiomeProfile() {
+			if (defaultBiomeProfileSelector != null) {
+				defaultBiomeProfileSelector.run();
 			}
 		}
 	}
@@ -110,7 +110,7 @@ public class BiomeProfileMenuFactory {
 	private final BiomeProfileDirectory biomeProfileDirectory;
 	private final String reloadText;
 	private final int reloadMnemonic;
-	private final String reloadAccelerator;
+	private final MenuShortcut reloadMenuShortcut;
 
 	public BiomeProfileMenuFactory(
 			JMenu parentMenu,
@@ -118,13 +118,13 @@ public class BiomeProfileMenuFactory {
 			BiomeProfileDirectory biomeProfileDirectory,
 			String reloadText,
 			int reloadMnemonic,
-			String reloadAccelerator) {
+			MenuShortcut reloadMenuShortcut) {
 		this.parentMenu = parentMenu;
 		this.actions = actions;
 		this.biomeProfileDirectory = biomeProfileDirectory;
 		this.reloadText = reloadText;
 		this.reloadMnemonic = reloadMnemonic;
-		this.reloadAccelerator = reloadAccelerator;
+		this.reloadMenuShortcut = reloadMenuShortcut;
 		AmidstLogger.info("Checking for additional biome profiles.");
 		initParentMenu();
 	}
@@ -135,8 +135,8 @@ public class BiomeProfileMenuFactory {
 		BiomeProfileVisitorImpl visitor = new BiomeProfileVisitorImpl(parentMenu, actions);
 		biomeProfileDirectory.visitProfiles(visitor);
 		parentMenu.addSeparator();
-		Menus.item(parentMenu, this::doReload, reloadText, reloadMnemonic, reloadAccelerator);
-		visitor.selectFirstProfile();
+		Menus.item(parentMenu, this::doReload, reloadText, reloadMnemonic, reloadMenuShortcut);
+		visitor.selectDefaultBiomeProfile();
 	}
 
 	private void doReload() {

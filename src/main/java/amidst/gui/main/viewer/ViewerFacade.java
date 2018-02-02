@@ -94,6 +94,7 @@ public class ViewerFacade {
 		graph.dispose();
 		zoom.skipFading();
 		zoom.reset();
+		world.dispose();
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
@@ -118,8 +119,8 @@ public class ViewerFacade {
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
-	public BufferedImage createCaptureImage() {
-		return viewer.createCaptureImage();
+	public BufferedImage createScreenshot() {
+		return viewer.createScreenshot();
 	}
 
 	@CalledOnlyBy(AmidstThread.EDT)
